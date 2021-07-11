@@ -1,4 +1,4 @@
-module github.com/justDMNK/logrus-stackdrive-formatter
+module github.com/justDMNK/logrus-stackdriver-formatter
 
 go 1.12
 

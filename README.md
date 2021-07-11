@@ -11,7 +11,7 @@ package main
 import (
 	"github.com/gofiber/fiber/v2"
 	log "github.com/sirupsen/logrus"
-	logForm "github.com/justDMNK/logrus-stackdrive-formatter"
+	logForm "github.com/justDMNK/logrus-stackdriver-formatter"
 	"time"
 )
 
