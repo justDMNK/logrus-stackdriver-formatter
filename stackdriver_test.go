@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/gofiber/fiber/v2"
+	"github.com/sirupsen/logrus"
 	"net/http"
 	"reflect"
 	"testing"
-
-	"github.com/sirupsen/logrus"
 )
 
 func TestFormatter(t *testing.T) {
@@ -65,12 +65,13 @@ var formatterTests = []struct {
 	{
 		name: "WithField, HTTPRequest and Error",
 		run: func(logger *logrus.Logger) {
-			req, _ := http.NewRequest("GET", "http://foo.bar", nil)
-			logger.
-				WithFields(logrus.Fields{
-					"foo":         "bar",
-					"httpRequest": &HTTPRequest{Request: req},
-				}).Error("my log entry")
+			app := fiber.New()
+			app.Get("/test", func(ctx *fiber.Ctx) error {
+				logger.WithFields(logrus.Fields{"foo": "bar", "httpRequest": &HTTPRequest{Request: ctx}}).Error("my log entry")
+				return nil
+			})
+			req, _ := http.NewRequest("GET", "http://foo.bar/test", nil)
+			app.Test(req)
 		},
 		out: map[string]interface{}{
 			"severity": "ERROR",
@@ -78,7 +79,7 @@ var formatterTests = []struct {
 			"foo":      "bar",
 			"httpRequest": map[string]interface{}{
 				"requestMethod": "GET",
-				"requestUrl":    "http://foo.bar",
+				"requestUrl":    "/test",
 			},
 		},
 	},

@@ -4,9 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"time"
-
 	"github.com/sirupsen/logrus"
+	"time"
 )
 
 // Format configuration of the logrus formatter output.

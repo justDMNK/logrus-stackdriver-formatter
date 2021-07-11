@@ -1,17 +1,14 @@
 package log
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"time"
-	"unicode/utf8"
-
-	"github.com/golang/protobuf/ptypes"
-	durpb "github.com/golang/protobuf/ptypes/duration"
+	"github.com/gofiber/fiber/v2"
 	"github.com/sirupsen/logrus"
 	logtypepb "google.golang.org/genproto/googleapis/logging/type"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"time"
 )
 
 // StackdriverFormat maps values to be recognized by the Google Cloud Platform.
@@ -28,10 +25,7 @@ func StackdriverFormat(f *Formatter) error {
 	}
 	f.TimestampFormat = func(fields logrus.Fields, now time.Time) error {
 		// https://cloud.google.com/logging/docs/agent/configuration#timestamp-processing
-		ts, err := ptypes.TimestampProto(now)
-		if err != nil {
-			return err
-		}
+		ts := timestamppb.Now()
 		fields["timestamp"] = ts
 		return nil
 	}
@@ -44,7 +38,7 @@ func StackdriverFormat(f *Formatter) error {
 // https://github.com/googleapis/google-cloud-go/blob/v0.39.0/logging/logging.go#L617
 type HTTPRequest struct {
 	// Request is the http.Request passed to the handler.
-	Request *http.Request
+	Request *fiber.Ctx
 
 	// RequestSize is the size of the HTTP request message in bytes, including
 	// the request headers and the request body.
@@ -66,10 +60,6 @@ type HTTPRequest struct {
 	// was sent to.
 	LocalIP string
 
-	// RemoteIP is the IP address (IPv4 or IPv6) of the client that issued the
-	// HTTP request. Examples: "192.168.1.1", "FE80::0202:B3FF:FE1E:8329".
-	RemoteIP string
-
 	// CacheHit reports whether an entity was served from cache (with or without
 	// validation).
 	CacheHit bool
@@ -84,17 +74,14 @@ func (r HTTPRequest) MarshalJSON() ([]byte, error) {
 	if r.Request == nil {
 		return nil, nil
 	}
-	u := *r.Request.URL
-	u.Fragment = ""
 	// https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry#HttpRequest
 	e := &logEntry{
-		RequestMethod:                  r.Request.Method,
-		RequestURL:                     fixUTF8(u.String()),
+		RequestMethod:                  r.Request.Method(),
+		RequestURL:                     r.Request.OriginalURL(),
 		Status:                         r.Status,
-		UserAgent:                      r.Request.UserAgent(),
+		UserAgent:                      string(r.Request.Context().UserAgent()),
 		ServerIP:                       r.LocalIP,
-		RemoteIP:                       r.RemoteIP,
-		Referer:                        r.Request.Referer(),
+		Referer:                        string(r.Request.Context().Referer()),
 		CacheHit:                       r.CacheHit,
 		CacheValidatedWithOriginServer: r.CacheValidatedWithOriginServer,
 	}
@@ -105,47 +92,25 @@ func (r HTTPRequest) MarshalJSON() ([]byte, error) {
 		e.ResponseSize = fmt.Sprintf("%d", r.ResponseSize)
 	}
 	if r.Latency != 0 {
-		e.Latency = ptypes.DurationProto(r.Latency)
+		e.Latency = durationpb.New(r.Latency)
 	}
 
 	return json.Marshal(e)
 }
 
 type logEntry struct {
-	RequestMethod                  string          `json:"requestMethod,omitempty"`
-	RequestURL                     string          `json:"requestUrl,omitempty"`
-	RequestSize                    string          `json:"requestSize,omitempty"`
-	Status                         int             `json:"status,omitempty"`
-	ResponseSize                   string          `json:"responseSize,omitempty"`
-	UserAgent                      string          `json:"userAgent,omitempty"`
-	RemoteIP                       string          `json:"remoteIp,omitempty"`
-	ServerIP                       string          `json:"serverIp,omitempty"`
-	Referer                        string          `json:"referer,omitempty"`
-	Latency                        *durpb.Duration `json:"latency,omitempty"`
-	CacheLookup                    bool            `json:"cacheLookup,omitempty"`
-	CacheHit                       bool            `json:"cacheHit,omitempty"`
-	CacheValidatedWithOriginServer bool            `json:"cacheValidatedWithOriginServer,omitempty"`
-	CacheFillBytes                 string          `json:"cacheFillBytes,omitempty"`
-	Protocol                       string          `json:"protocol,omitempty"`
-}
-
-// fixUTF8 is a helper that fixes an invalid UTF-8 string by replacing
-// invalid UTF-8 runes with the Unicode replacement character (U+FFFD).
-// See Issue https://github.com/googleapis/google-cloud-go/issues/1383.
-func fixUTF8(s string) string {
-	if utf8.ValidString(s) {
-		return s
-	}
-
-	// Otherwise time to build the sequence.
-	buf := new(bytes.Buffer)
-	buf.Grow(len(s))
-	for _, r := range s {
-		if utf8.ValidRune(r) {
-			buf.WriteRune(r)
-		} else {
-			buf.WriteRune('\uFFFD')
-		}
-	}
-	return buf.String()
+	RequestMethod                  string               `json:"requestMethod,omitempty"`
+	RequestURL                     string               `json:"requestUrl,omitempty"`
+	RequestSize                    string               `json:"requestSize,omitempty"`
+	Status                         int                  `json:"status,omitempty"`
+	ResponseSize                   string               `json:"responseSize,omitempty"`
+	UserAgent                      string               `json:"userAgent,omitempty"`
+	ServerIP                       string               `json:"serverIp,omitempty"`
+	Referer                        string               `json:"referer,omitempty"`
+	Latency                        *durationpb.Duration `json:"latency,omitempty"`
+	CacheLookup                    bool                 `json:"cacheLookup,omitempty"`
+	CacheHit                       bool                 `json:"cacheHit,omitempty"`
+	CacheValidatedWithOriginServer bool                 `json:"cacheValidatedWithOriginServer,omitempty"`
+	CacheFillBytes                 string               `json:"cacheFillBytes,omitempty"`
+	Protocol                       string               `json:"protocol,omitempty"`
 }
